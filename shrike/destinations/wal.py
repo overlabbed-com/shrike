@@ -46,6 +46,9 @@ class WriteAheadLog:
         # D-4: In-memory line counter (count from file once at startup for crash recovery)
         self._line_count = self._count_lines_sync()
 
+        # Phase 5.4 (#13): store line lengths from last read to avoid re-read in advance_cursor()
+        self._last_read_lengths: list[int] = []
+
         # Recover byte offset from cursor file, or rebuild it
         line_cursor, byte_offset = self._read_cursor()
         if byte_offset == 0 and line_cursor > 0:
@@ -87,16 +90,20 @@ class WriteAheadLog:
 
         Uses byte offset to seek directly to the undelivered region,
         avoiding an O(total_lines) scan from the start of the file.
+
+        Phase 5.4 (#13): stores line lengths so advance_cursor() can skip re-read.
         """
         async with self._lock:
             _line_cursor, byte_offset = self._read_cursor()
             events: list[dict] = []
+            self._last_read_lengths = []
             async with aiofiles.open(self._wal_path, "rb") as f:
                 await f.seek(byte_offset)
                 while len(events) < batch_size:
                     raw_line = await f.readline()
                     if not raw_line:
                         break
+                    self._last_read_lengths.append(len(raw_line))
                     stripped = raw_line.strip()
                     if stripped:
                         events.append(json.loads(stripped))
@@ -105,25 +112,28 @@ class WriteAheadLog:
     async def advance_cursor(self, count: int) -> None:
         """Move the cursor forward by *count* events.
 
-        Reads through *count* lines from the current byte offset to compute
-        the new byte offset, keeping subsequent reads O(batch_size).
+        Phase 5.4 (#13): uses _last_read_lengths to compute byte offset without re-read.
         """
         async with self._lock:
             line_cursor, byte_offset = self._read_cursor()
             new_line_cursor = line_cursor + count
 
-            # Compute new byte offset by reading forward through the lines we are advancing past
-            new_byte_offset = byte_offset
-            async with aiofiles.open(self._wal_path, "rb") as f:
-                await f.seek(byte_offset)
-                advanced = 0
-                while advanced < count:
-                    raw_line = await f.readline()
-                    if not raw_line:
-                        break
-                    new_byte_offset += len(raw_line)
-                    if raw_line.strip():
-                        advanced += 1
+            if self._last_read_lengths and count <= len(self._last_read_lengths):
+                new_byte_offset = byte_offset + sum(self._last_read_lengths[:count])
+                self._last_read_lengths = self._last_read_lengths[count:]
+            else:
+                new_byte_offset = byte_offset
+                async with aiofiles.open(self._wal_path, "rb") as f:
+                    await f.seek(byte_offset)
+                    advanced = 0
+                    while advanced < count:
+                        raw_line = await f.readline()
+                        if not raw_line:
+                            break
+                        new_byte_offset += len(raw_line)
+                        if raw_line.strip():
+                            advanced += 1
+                self._last_read_lengths = []
 
             async with aiofiles.open(self._cursor_path, "w") as f:
                 await f.write(f"{new_line_cursor}:{new_byte_offset}")
@@ -182,6 +192,7 @@ class WriteAheadLog:
 
         # Update line count only after cursor is consistent
         self._line_count = len(unsent)
+        self._last_read_lengths = []
 
     async def _read_unsent_unsafe(self, batch_size: int = 100) -> list[dict]:
         """Internal read_unsent without lock acquisition (caller holds the lock)."""

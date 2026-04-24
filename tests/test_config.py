@@ -1,5 +1,7 @@
 """Tests for Shrike configuration."""
 
+import pytest
+
 from shrike.config import Config
 
 
@@ -52,15 +54,15 @@ def test_config_fixture(config):
 def test_validate_splunk_hec_missing_url():
     """Splunk HEC destination requires URL."""
     cfg = Config(destinations=["splunk_hec"], splunk_hec_url="", splunk_hec_token="tok")
-    errors = cfg.validate()
-    assert any("SPLUNK_HEC_URL" in e for e in errors)
+    with pytest.raises(ValueError, match="SPLUNK_HEC_URL"):
+        cfg.validate()
 
 
 def test_validate_splunk_hec_missing_token():
     """Splunk HEC destination requires token."""
     cfg = Config(destinations=["splunk_hec"], splunk_hec_url="https://splunk:8088", splunk_hec_token="")
-    errors = cfg.validate()
-    assert any("SPLUNK_HEC_TOKEN" in e for e in errors)
+    with pytest.raises(ValueError, match="SPLUNK_HEC_TOKEN"):
+        cfg.validate()
 
 
 def test_validate_splunk_hec_valid():
@@ -70,40 +72,40 @@ def test_validate_splunk_hec_valid():
         splunk_hec_url="https://splunk:8088",
         splunk_hec_token="tok",
     )
-    errors = cfg.validate()
-    assert errors == []
+    result = cfg.validate()
+    assert result is cfg
 
 
 def test_validate_forwarder_missing_forward_to():
     """Forwarder mode requires forward_to."""
     cfg = Config(mode="forwarder", forward_to="", destinations=["file_jsonl"])
-    errors = cfg.validate()
-    assert any("SHRIKE_FORWARD_TO" in e for e in errors)
+    with pytest.raises(ValueError, match="SHRIKE_FORWARD_TO"):
+        cfg.validate()
 
 
 def test_validate_forwarder_valid():
     """Forwarder with forward_to passes."""
     cfg = Config(mode="forwarder", forward_to="upstream:4317", destinations=["file_jsonl"])
-    errors = cfg.validate()
-    assert errors == []
+    result = cfg.validate()
+    assert result is cfg
 
 
 def test_validate_s3_missing_endpoint():
     """S3 destination requires endpoint."""
     cfg = Config(destinations=["s3"], s3_endpoint="", s3_bucket="mybucket")
-    errors = cfg.validate()
-    assert any("S3_ENDPOINT" in e for e in errors)
+    with pytest.raises(ValueError, match="S3_ENDPOINT"):
+        cfg.validate()
 
 
 def test_validate_s3_missing_bucket():
     """S3 destination requires bucket."""
     cfg = Config(destinations=["s3"], s3_endpoint="http://minio:9000", s3_bucket="")
-    errors = cfg.validate()
-    assert any("S3_BUCKET" in e for e in errors)
+    with pytest.raises(ValueError, match="S3_BUCKET"):
+        cfg.validate()
 
 
 def test_validate_file_jsonl_no_extra_requirements():
     """file_jsonl destination has no special validation."""
     cfg = Config(destinations=["file_jsonl"])
-    errors = cfg.validate()
-    assert errors == []
+    result = cfg.validate()
+    assert result is cfg

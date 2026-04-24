@@ -73,8 +73,8 @@ class Config:
                 parts.append(f"{f.name}={val!r}")
         return f"Config({', '.join(parts)})"
 
-    def validate(self) -> list[str]:
-        """Validate configuration consistency. Returns a list of error messages (empty = valid).
+    def validate(self) -> "Config":
+        """Validate configuration consistency. Raises ValueError if config is invalid.
 
         Checks destination-specific required fields and mode-specific requirements.
         """
@@ -105,7 +105,9 @@ class Config:
                     "destination 's3' requires S3_BUCKET to be set"
                 )
 
-        return errors
+        if errors:
+            raise ValueError("; ".join(errors))
+        return self
 
     @classmethod
     def from_env(cls) -> Config:

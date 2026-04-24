@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -333,3 +334,16 @@ def test_ingest_returns_200_with_partial_success(mock_config: Config) -> None:
                 data = response.json()
                 assert data["accepted"] == 1
                 assert data["total"] == 2
+
+# ------------------------------------------------------------------
+# Phase 4.2 (#10) — Body size limit middleware
+# ------------------------------------------------------------------
+
+
+def test_body_too_large_returns_413(mock_config: Config) -> None:
+    """Requests over 10MB must be rejected with 413."""
+    app = create_runtime_app(mock_config)
+    with TestClient(app) as client:
+        large_body = json.dumps({"logs": ["x" * 1000] * 15000}).encode()  # ~15MB
+        response = client.post("/v1/ingest", content=large_body, headers={"content-type": "application/json"})
+        assert response.status_code == 413

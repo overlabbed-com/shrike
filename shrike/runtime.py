@@ -23,6 +23,7 @@ from typing import Annotated
 from fastapi import Depends, FastAPI, Header, HTTPException, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field, StringConstraints
+from starlette.middleware.base import BaseHTTPMiddleware
 
 import uvicorn
 
@@ -126,6 +127,17 @@ def create_runtime_app(config: Config) -> FastAPI:
     # Phase 4.2 (#10): Body size is validated by Pydantic (max_length=10000 log items).
     # For byte-level limits, configure uvicorn's limit_max_bytes in the Config or deployment.
 
+    class BodySizeLimitMiddleware(BaseHTTPMiddleware):
+        MAX_BYTES = 10_000_000  # 10MB
+
+        async def dispatch(self, request, call_next):
+            content_length = request.headers.get("content-length")
+            if content_length and int(content_length) > self.MAX_BYTES:
+                return JSONResponse(status_code=413, content={"error": "Request body too large"})
+            return await call_next(request)
+
+    app.add_middleware(BodySizeLimitMiddleware)
+
     # Auth dependency — accesses config via app.state to avoid closure capture
     async def verify_auth(request: Request, authorization: str | None = Header(None)):
         cfg = request.app.state.config
@@ -133,7 +145,7 @@ def create_runtime_app(config: Config) -> FastAPI:
             return
         if not authorization or not authorization.startswith("Bearer "):
             raise HTTPException(status_code=401, detail="Bearer token required")
-        if not hmac.compare_digest(authorization[7:], cfg.ingest_api_key):
+        if not hmac.compare_digest(authorization[7:].encode(), cfg.ingest_api_key.encode()):
             raise HTTPException(status_code=401, detail="Invalid token")
 
     @app.get("/health")
@@ -234,11 +246,7 @@ def main():
     )
 
     config = Config.from_env()
-    errors = config.validate()
-    if errors:
-        for err in errors:
-            logger.error("Config error: %s", err)
-        raise SystemExit(1)
+    config.validate()  # raises ValueError on invalid
 
     logger.info("Shrike runtime v0.1.0 — destinations=%s", config.destinations)
 

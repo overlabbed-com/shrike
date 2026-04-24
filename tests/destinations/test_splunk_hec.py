@@ -88,13 +88,15 @@ async def test_send_batch_success(tmp_path: Path) -> None:
 
     mock_resp = AsyncMock()
     mock_resp.status = 200
+    mock_resp.json = AsyncMock(return_value={"entry": []})
     mock_resp.__aenter__ = AsyncMock(return_value=mock_resp)
     mock_resp.__aexit__ = AsyncMock(return_value=False)
 
     mock_post = MagicMock(return_value=mock_resp)
 
-    mock_session = AsyncMock()
+    mock_session = MagicMock()
     mock_session.post = mock_post
+    mock_session.get = MagicMock(return_value=mock_resp)
     mock_session.closed = False
 
     # Patch _get_session to return the mock session
@@ -181,11 +183,13 @@ async def test_send_batch_400_rejected(tmp_path: Path) -> None:
     mock_resp = AsyncMock()
     mock_resp.status = 400
     mock_resp.text = AsyncMock(return_value="Bad request")
+    mock_resp.json = AsyncMock(return_value={"entry": []})
     mock_resp.__aenter__ = AsyncMock(return_value=mock_resp)
     mock_resp.__aexit__ = AsyncMock(return_value=False)
 
-    mock_session = AsyncMock()
+    mock_session = MagicMock()
     mock_session.post = MagicMock(return_value=mock_resp)
+    mock_session.get = MagicMock(return_value=mock_resp)
     mock_session.closed = False
     dest._session = mock_session
 
@@ -206,11 +210,13 @@ async def test_send_batch_503_retryable(tmp_path: Path) -> None:
     mock_resp = AsyncMock()
     mock_resp.status = 503
     mock_resp.text = AsyncMock(return_value="Service unavailable")
+    mock_resp.json = AsyncMock(return_value={"entry": []})
     mock_resp.__aenter__ = AsyncMock(return_value=mock_resp)
     mock_resp.__aexit__ = AsyncMock(return_value=False)
 
-    mock_session = AsyncMock()
+    mock_session = MagicMock()
     mock_session.post = MagicMock(return_value=mock_resp)
+    mock_session.get = MagicMock(return_value=mock_resp)
     mock_session.closed = False
     dest._session = mock_session
 
