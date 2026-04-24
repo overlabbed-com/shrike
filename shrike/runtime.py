@@ -20,9 +20,9 @@ import time
 from contextlib import asynccontextmanager
 from typing import Annotated
 
-from fastapi import Body, Depends, FastAPI, Header, HTTPException, Request
+from fastapi import Depends, FastAPI, Header, HTTPException, Request
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, StringConstraints
 
 import uvicorn
 
@@ -33,39 +33,6 @@ from shrike.destinations.splunk_hec import SplunkHECDestination
 from shrike.destinations.worker import DestinationWorker
 
 logger = logging.getLogger("shrike.runtime")
-
-
-MAX_BATCH_SIZE = 10_000
-MAX_LOG_BYTES = 65_536
-
-
-class IngestRequest(BaseModel):
-    logs: list[str] = Field(..., max_length=MAX_BATCH_SIZE)
-
-    @field_validator("logs")
-    @classmethod
-    def check_log_sizes(cls, v: list[str]) -> list[str]:
-        for log in v:
-            if len(log) > MAX_LOG_BYTES:
-                raise ValueError(f"Individual log exceeds {MAX_LOG_BYTES} byte limit")
-        return v
-
-
-class NormalizeRequest(BaseModel):
-    raw_log: str = Field(..., max_length=MAX_LOG_BYTES)
-
-
-class BatchRequest(BaseModel):
-    logs: list[str] = Field(..., max_length=MAX_BATCH_SIZE)
-
-    @field_validator("logs")
-    @classmethod
-    def check_log_sizes(cls, v: list[str]) -> list[str]:
-        for log in v:
-            if len(log) > MAX_LOG_BYTES:
-                raise ValueError(f"Individual log exceeds {MAX_LOG_BYTES} byte limit")
-        return v
-
 
 # Destination factory
 _DEST_FACTORIES = {
@@ -135,6 +102,12 @@ def create_runtime_app(config: Config) -> FastAPI:
         if not hmac.compare_digest(authorization[7:], config.ingest_api_key):
             raise HTTPException(status_code=401, detail="Invalid token")
 
+    class IngestRequest(BaseModel):
+        logs: Annotated[
+            list[Annotated[str, StringConstraints(max_length=65536)]],
+            Field(max_length=10000),
+        ]
+
     @app.get("/health")
     async def health():
         dest_health = {}
@@ -150,17 +123,18 @@ def create_runtime_app(config: Config) -> FastAPI:
                 all_healthy = False
         return {
             "status": "healthy" if all_healthy else "degraded",
+            "mode": config.mode,
             "pipeline": "active" if _pipeline else "passthrough",
             "destinations": dest_health,
         }
 
-    @app.post("/v1/ingest")
-    async def ingest(request: Request, payload: IngestRequest = Body(...), _auth=Depends(verify_auth)):
+    @app.post("/v1/ingest", dependencies=[Depends(verify_auth)])
+    async def ingest(body: IngestRequest, request: Request):
         now = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
         source_ip = request.client.host if request.client else "unknown"
 
         events = []
-        for raw_log in payload.logs:
+        for raw_log in body.logs:
             if _pipeline:
                 result = _pipeline.process(raw_log)
                 if not result.dropped:
@@ -180,7 +154,7 @@ def create_runtime_app(config: Config) -> FastAPI:
                 })
 
         if not events:
-            return {"accepted": 0, "total": len(payload.logs), "normalized": 0}
+            return {"accepted": 0, "total": len(body.logs), "normalized": 0}
 
         results = await router.route(events)
         total_accepted = sum(r.accepted for r in results.values())
@@ -190,19 +164,27 @@ def create_runtime_app(config: Config) -> FastAPI:
 
         return {
             "accepted": total_accepted,
-            "total": len(payload.logs),
+            "total": len(body.logs),
             "normalized": len(events),
         }
 
-    # Expose pipeline endpoints if available
+    # Also expose the original normalize/batch endpoints
     if _pipeline:
+        from fastapi.responses import JSONResponse
+
+        class NormalizeRequest(BaseModel):
+            raw_log: str
+
+        class BatchRequest(BaseModel):
+            logs: list[str]
+
         @app.post("/normalize")
-        async def normalize(req: NormalizeRequest, _auth=Depends(verify_auth)):
+        async def normalize(req: NormalizeRequest):
             result = _pipeline.process(req.raw_log)
             return JSONResponse(content=result.to_dict())
 
         @app.post("/batch")
-        async def batch(req: BatchRequest, _auth=Depends(verify_auth)):
+        async def batch(req: BatchRequest):
             results = _pipeline.process_batch(req.logs)
             return JSONResponse(content=[r.to_dict() for r in results if not r.dropped])
 
