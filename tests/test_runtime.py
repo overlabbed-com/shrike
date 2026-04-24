@@ -248,3 +248,88 @@ async def test_shutdown_awaits_tasks_with_timeout(tmp_path) -> None:
 
     assert len(tasks_created) == 1
     assert tasks_created[0].get_name() == "worker-file_jsonl"
+
+
+# ------------------------------------------------------------------
+# Phase 4.1 (#3) — 507 vs 400 distinction
+# ------------------------------------------------------------------
+
+
+def test_ingest_returns_507_when_wal_full(mock_config: Config) -> None:
+    """ingest() must return 507 when all destinations are at WAL capacity.
+    Phase 4.1 (#3): WAL overflow → 507.
+    """
+    async def mock_route_full(events):
+        # All WALs full — nothing accepted
+        return {"file_jsonl": AsyncMock(accepted=0, rejected=0)}
+
+    with patch("shrike.runtime.DestinationRouter") as MockRouter:
+        mock_router = MagicMock()
+        mock_router.route = mock_route_full
+        MockRouter.return_value = mock_router
+
+        with patch("shrike.runtime.FileJSONLDestination") as MockFileDest:
+            mock_wal = MagicMock()
+            mock_wal.read_unsent = AsyncMock(return_value=[])
+            mock_wal.pending_count = 0
+            mock_wal.disk_usage_mb = 0.0
+
+            mock_dest = MagicMock()
+            mock_dest.name = "file_jsonl"
+            mock_dest.wal = mock_wal
+            mock_dest.health = AsyncMock(return_value=MagicMock(healthy=True, pending=0, disk_usage_mb=0.0))
+            mock_dest.close = AsyncMock()
+            MockFileDest.return_value = mock_dest
+
+            app = create_runtime_app(mock_config)
+
+            with TestClient(app) as client:
+                response = client.post(
+                    "/v1/ingest",
+                    json={"logs": ["test log line"]},
+                )
+
+                assert response.status_code == 507
+
+
+
+def test_ingest_returns_200_with_partial_success(mock_config: Config) -> None:
+    """ingest() must return 200 when some destinations succeed (partial success).
+    Phase 4.1 (#3): partial success is visible in the response.
+    """
+    async def mock_route_partial(events):
+        # One destination succeeded (partial), one failed
+        return {
+            "file_jsonl": AsyncMock(accepted=1, rejected=0),
+        }
+
+    with patch("shrike.runtime.DestinationRouter") as MockRouter:
+        mock_router = MagicMock()
+        mock_router.route = mock_route_partial
+        MockRouter.return_value = mock_router
+
+        with patch("shrike.runtime.FileJSONLDestination") as MockFileDest:
+            mock_wal = MagicMock()
+            mock_wal.read_unsent = AsyncMock(return_value=[])
+            mock_wal.pending_count = 0
+            mock_wal.disk_usage_mb = 0.0
+
+            mock_dest = MagicMock()
+            mock_dest.name = "file_jsonl"
+            mock_dest.wal = mock_wal
+            mock_dest.health = AsyncMock(return_value=MagicMock(healthy=True, pending=0, disk_usage_mb=0.0))
+            mock_dest.close = AsyncMock()
+            MockFileDest.return_value = mock_dest
+
+            app = create_runtime_app(mock_config)
+
+            with TestClient(app) as client:
+                response = client.post(
+                    "/v1/ingest",
+                    json={"logs": ["line a", "line b"]},
+                )
+
+                assert response.status_code == 200
+                data = response.json()
+                assert data["accepted"] == 1
+                assert data["total"] == 2
