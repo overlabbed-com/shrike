@@ -73,3 +73,19 @@ USER shrike
 # Default: production runtime server (HTTP API + Splunk HEC)
 # Override for CLI: docker run shrike python -m shrike.cli --input /data/logs.txt
 CMD ["python", "-m", "shrike.runtime"]
+
+# ===== TEST STAGE =====
+# Build: docker build --target test -t shrike-test .
+# Run:  docker compose --profile test run --rm test
+# Or:   docker compose run --profile test --rm test
+FROM python:3.12-slim AS test
+WORKDIR /shrike
+COPY pyproject.toml .
+RUN pip install --no-cache-dir -e ".[dev]"
+COPY tests/ tests/
+COPY shrike/ shrike/
+COPY patterns/ patterns/
+COPY schemas/ schemas/
+COPY data/ data/
+COPY filters/ filters/
+CMD ["python", "-m", "pytest", "tests/unit/", "tests/test_server.py", "tests/test_config.py", "-q"]

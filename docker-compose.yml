@@ -56,6 +56,19 @@ services:
       shrike:
         condition: service_healthy
 
+  test:
+    build:
+      context: .
+      target: test
+    container_name: shrike-test
+    working_dir: /shrike
+    command: python -m pytest tests/unit/ tests/test_server.py tests/test_config.py -q
+    volumes:
+      - .:/shrike
+    depends_on: []
+    profiles:
+      - test
+
 volumes:
   shrike-data:
   fluent-bit-positions:
