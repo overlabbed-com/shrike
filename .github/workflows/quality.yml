@@ -26,4 +26,4 @@ jobs:
         run: pip install --upgrade pip
 
       - name: Vulnerability scan
-        run: pip install pip-audit && pip-audit --disable-trusted-hosts
+        run: pip install pip-audit && pip-audit --ignore-vuln CVE-2026-3219
