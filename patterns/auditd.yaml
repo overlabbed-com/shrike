@@ -1,51 +1,240 @@
 source: auditd
-description: 'Linux audit daemon logs'
+description: Linux audit daemon logs
 version: 1
 patterns:
-  - name: auditd_syscall
-    match:
-      log_format: [syslog_bsd]
-      regex: 'type=\s*SYSCALL.*?syscall=\s*(?P<syscall>\d+).*?arch=\s*(?P<arch>\S+).*?success=\s*(?P<success>\w+).*?exit=\s*(?P<exit>\d+)"'
-    ocsf_class_uid: 5001
-    ocsf_class_name: Process Started
-    field_map:
-      syscall: metadata.event_code
-      arch: activity.description
-      success: status
-      exit: metadata.count
-    static:
-      category_uid: 5
-      category_name: System Activity
-      vendor_name: auditd
-      product_name: Linux Audit
-
-  - name: auditd_path
-    match:
-      log_format: [syslog_bsd]
-      regex: 'type=\s*PATH.*?item=\s*(?P<item>\d+).*?"name":\s*"(?P<name>[^"]+).*?"inode":\s*(?P<inode>\d+)"'
-    ocsf_class_uid: 5001
-    ocsf_class_name: Process Started
-    field_map:
-      item: metadata.count
-      name: file.name
-      inode: metadata.count
-    static:
-      category_uid: 5
-      category_name: System Activity
-      vendor_name: auditd
-      product_name: Linux Audit
-
-  - name: auditd_execve
-    match:
-      log_format: [syslog_bsd]
-      regex: 'type=\s*EXECVE.*?argc=\s*(?P<argc>\d+).*?"a[0-9]+":\s*"(?P<cmd>[^"]+)"'
-    ocsf_class_uid: 5001
-    ocsf_class_name: Process Started
-    field_map:
-      argc: metadata.count
-      cmd: process.cmd_line
-    static:
-      category_uid: 5
-      category_name: System Activity
-      vendor_name: auditd
-      product_name: Linux Audit
+- name: auditd_syscall
+  match:
+    log_format:
+    - kv
+    regex: type=\s*SYSCALL.*?syscall=\s*(?P<syscall>\d+).*?arch=\s*(?P<arch>\S+).*?success=\s*(?P<success>\w+).*?exit=\s*(?P<exit>\d+)"
+  ocsf_class_uid: 5001
+  ocsf_class_name: Process Started
+  field_map:
+    syscall: metadata.event_code
+    arch: activity.description
+    success: status
+    exit: metadata.count
+    hostname: src_endpoint.hostname
+    addr: src_endpoint.ip
+  static:
+    category_uid: 5
+    category_name: System Activity
+    vendor_name: auditd
+    product_name: Linux Audit
+- name: auditd_path
+  match:
+    log_format:
+    - kv
+    regex: type=\s*PATH.*?item=\s*(?P<item>\d+).*?"name":\s*"(?P<name>[^"]+).*?"inode":\s*(?P<inode>\d+)"
+  ocsf_class_uid: 5001
+  ocsf_class_name: Process Started
+  field_map:
+    item: metadata.count
+    name: file.name
+    inode: metadata.count
+    hostname: src_endpoint.hostname
+    addr: src_endpoint.ip
+  static:
+    category_uid: 5
+    category_name: System Activity
+    vendor_name: auditd
+    product_name: Linux Audit
+- name: auditd_execve
+  match:
+    log_format:
+    - kv
+    regex: type=\s*EXECVE.*?argc=\s*(?P<argc>\d+).*?"a[0-9]+":\s*"(?P<cmd>[^"]+)"
+  ocsf_class_uid: 5001
+  ocsf_class_name: Process Started
+  field_map:
+    argc: metadata.count
+    cmd: process.cmd_line
+    hostname: src_endpoint.hostname
+    addr: src_endpoint.ip
+  static:
+    category_uid: 5
+    category_name: System Activity
+    vendor_name: auditd
+    product_name: Linux Audit
+- name: auditd_service_start
+  match:
+    log_format:
+    - kv
+    regex: type=\s*SERVICE_START.*?pid=\s*(?P<pid>\d+).*?uid=\s*(?P<uid>\d+).*?auid=\s*(?P<auid>\d+).*?ses=\s*(?P<ses>\d+).*?subj=\s*(?P<subj>\S+).*?(?:\w+="[^"]+"\s*)*exe="(?P<exe>[^"]+)"
+  ocsf_class_uid: 3002
+  ocsf_class_name: Authentication
+  field_map:
+    type: activity_name
+    pid: process.pid
+    uid: user
+    auid: actor.user.uid
+    ses: session.uid
+    subj: process.integrity_level
+    exe: process.name
+    hostname: src_endpoint.hostname
+    addr: src_endpoint.ip
+  static:
+    category_uid: 3
+    category_name: IAM
+    vendor_name: auditd
+    product_name: Linux Audit
+- name: auditd_service_stop
+  match:
+    log_format:
+    - kv
+    regex: type=\s*SERVICE_STOP.*?pid=\s*(?P<pid>\d+).*?uid=\s*(?P<uid>\d+).*?auid=\s*(?P<auid>\d+).*?ses=\s*(?P<ses>\d+).*?subj=\s*(?P<subj>\S+).*?(?:\w+="[^"]+"\s*)*exe="(?P<exe>[^"]+)"
+  ocsf_class_uid: 3002
+  ocsf_class_name: Authentication
+  field_map:
+    type: activity_name
+    pid: process.pid
+    uid: user
+    auid: actor.user.uid
+    ses: session.uid
+    subj: process.integrity_level
+    exe: process.name
+    hostname: src_endpoint.hostname
+    addr: src_endpoint.ip
+  static:
+    category_uid: 3
+    category_name: IAM
+    vendor_name: auditd
+    product_name: Linux Audit
+- name: auditd_cred_refr
+  match:
+    log_format:
+    - kv
+    regex: type=\s*CRED_REFR.*?pid=\s*(?P<pid>\d+).*?uid=\s*(?P<uid>\d+).*?auid=\s*(?P<auid>\d+).*?ses=\s*(?P<ses>\d+).*?subj=\s*(?P<subj>\S+).*?(?:\w+="[^"]+"\s*)*exe="(?P<exe>[^"]+)"
+  ocsf_class_uid: 3002
+  ocsf_class_name: Authentication
+  field_map:
+    type: activity_name
+    pid: process.pid
+    uid: user
+    auid: actor.user.uid
+    ses: session.uid
+    subj: process.integrity_level
+    exe: process.name
+    hostname: src_endpoint.hostname
+    addr: src_endpoint.ip
+    acct: actor.user.name
+  static:
+    category_uid: 3
+    category_name: IAM
+    vendor_name: auditd
+    product_name: Linux Audit
+- name: auditd_cred_acq
+  match:
+    log_format:
+    - kv
+    regex: type=\s*CRED_ACQ.*?pid=\s*(?P<pid>\d+).*?uid=\s*(?P<uid>\d+).*?auid=\s*(?P<auid>\d+).*?ses=\s*(?P<ses>\d+).*?subj=\s*(?P<subj>\S+).*?(?:\w+="[^"]+"\s*)*exe="(?P<exe>[^"]+)"
+  ocsf_class_uid: 3002
+  ocsf_class_name: Authentication
+  field_map:
+    type: activity_name
+    pid: process.pid
+    uid: user
+    auid: actor.user.uid
+    ses: session.uid
+    subj: process.integrity_level
+    exe: process.name
+    hostname: src_endpoint.hostname
+    addr: src_endpoint.ip
+    acct: actor.user.name
+  static:
+    category_uid: 3
+    category_name: IAM
+    vendor_name: auditd
+    product_name: Linux Audit
+- name: auditd_cred_disp
+  match:
+    log_format:
+    - kv
+    regex: type=\s*CRED_DISP.*?pid=\s*(?P<pid>\d+).*?uid=\s*(?P<uid>\d+).*?auid=\s*(?P<auid>\d+).*?ses=\s*(?P<ses>\d+).*?subj=\s*(?P<subj>\S+).*?(?:\w+="[^"]+"\s*)*exe="(?P<exe>[^"]+)"
+  ocsf_class_uid: 3002
+  ocsf_class_name: Authentication
+  field_map:
+    type: activity_name
+    pid: process.pid
+    uid: user
+    auid: actor.user.uid
+    ses: session.uid
+    subj: process.integrity_level
+    exe: process.name
+    hostname: src_endpoint.hostname
+    addr: src_endpoint.ip
+    acct: actor.user.name
+  static:
+    category_uid: 3
+    category_name: IAM
+    vendor_name: auditd
+    product_name: Linux Audit
+- name: auditd_login
+  match:
+    log_format:
+    - kv
+    regex: type=\s*LOGIN.*?pid=\s*(?P<pid>\d+).*?uid=\s*(?P<uid>\d+).*?old-auid=\s*(?P<old_auid>\d+).*?auid=\s*(?P<auid>\d+).*?old-ses=\s*(?P<old_ses>\d+).*?ses=\s*(?P<ses>\d+).*?res=\s*(?P<res>\d+)
+  ocsf_class_uid: 3002
+  ocsf_class_name: Authentication
+  field_map:
+    type: activity_name
+    pid: process.pid
+    uid: user
+    old_auid: actor.user.uid
+    auid: actor.user.uid
+    old_ses: session.uid
+    ses: session.uid
+    res: status
+    hostname: src_endpoint.hostname
+    addr: src_endpoint.ip
+  static:
+    category_uid: 3
+    category_name: IAM
+    vendor_name: auditd
+    product_name: Linux Audit
+- name: auditd_user_start
+  match:
+    log_format:
+    - kv
+    regex: type=\s*USER_START.*?pid=\s*(?P<pid>\d+).*?uid=\s*(?P<uid>\d+).*?auid=\s*(?P<auid>\d+).*?ses=\s*(?P<ses>\d+).*?subj=\s*(?P<subj>\S+).*?(?:\w+="[^"]+"\s*)*exe="(?P<exe>[^"]+)"
+  ocsf_class_uid: 3002
+  ocsf_class_name: Authentication
+  field_map:
+    type: activity_name
+    pid: process.pid
+    uid: user
+    auid: actor.user.uid
+    ses: session.uid
+    subj: process.integrity_level
+    exe: process.name
+    hostname: src_endpoint.hostname
+    addr: src_endpoint.ip
+    acct: actor.user.name
+  static:
+    category_uid: 3
+    category_name: IAM
+    vendor_name: auditd
+    product_name: Linux Audit
+- name: auditd_user_cmd
+  match:
+    log_format:
+    - kv
+    regex: type=\s*USER_CMD.*?pid=\s*(?P<pid>\d+).*?uid=\s*(?P<uid>\d+).*?auid=\s*(?P<auid>\d+).*?ses=\s*(?P<ses>\d+).*?subj=\s*(?P<subj>\S+).*?(?:\w+="[^"]+"\s*)*exe="(?P<exe>[^"]+)"
+  ocsf_class_uid: 3002
+  ocsf_class_name: Authentication
+  field_map:
+    type: activity_name
+    pid: process.pid
+    uid: user
+    auid: actor.user.uid
+    ses: session.uid
+    subj: process.integrity_level
+    exe: process.name
+    hostname: src_endpoint.hostname
+    addr: src_endpoint.ip
+    acct: actor.user.name
+  static:
+    category_uid: 3
+    category_name: IAM
+    vendor_name: auditd
+    product_name: Linux Audit
