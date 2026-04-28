@@ -243,7 +243,7 @@ class TestRelevanceScorer:
         })
         event = {"class_uid": 3002, "activity_id": 1}
         result = scorer.score(event)
-        assert result.score == pytest.approx(1.0, abs=0.01)
+        assert abs(result.score - 1.0) < 0.01
 
     def test_attack_techniques_matched(self):
         # Auth logon with full fields should match T1078, T1133, T1021, T1110

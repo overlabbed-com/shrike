@@ -370,7 +370,7 @@ class TestScoreComposite:
         """Default weights sum to 1.0."""
         scorer = RelevanceScorer()
         total = sum(scorer._weights.values())
-        assert total == pytest.approx(1.0, abs=0.01)
+        assert abs(total - 1.0) < 0.01
 
     def test_custom_weights_all_zeros(self):
         """All-zero weights produce score of 0.0."""

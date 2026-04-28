@@ -100,7 +100,9 @@ class SplunkHECDestination(Destination):
         mgmt_password: str = "",
         **kwargs: object,
     ) -> None:
-        self._url = url.rstrip("/") + "/services/collector/event"
+        # Avoid double-path when SPLUNK_HEC_URL already includes /services/collector
+        base = url.rstrip("/")
+        self._url = base + ("/event" if not base.endswith("/services/collector/event") else "")
         self._token = token
         self._last_send: float = 0.0
         self._retry_count: int = 0

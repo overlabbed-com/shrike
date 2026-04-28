@@ -46,20 +46,21 @@ class TestOCSFValidator:
             "time": "2024-03-15T10:00:00Z",
             "user": "alice",
         }
-        errors = validator.validate(event)
-        assert isinstance(errors, list)
+        result = validator.validate(event)
+        assert result.valid is True
+        assert len(result.errors) == 0
 
     def test_validate_missing_required_fields(self):
         """Missing required fields produce errors."""
         validator = OCSFValidator()
         event = {
             "class_uid": 3002,
-            # Missing class_name, category_uid, time
+            # Missing user (required for Authentication class)
         }
-        errors = validator.validate(event)
+        result = validator.validate(event)
         # Should have errors for missing required fields
-        error_fields = [e.field for e in errors]
-        assert "class_name" in error_fields or "time" in error_fields
+        error_fields = [e.field for e in result.errors]
+        assert "user" in error_fields
 
     def test_validate_wrong_type(self):
         """Wrong type produces error."""
@@ -70,8 +71,9 @@ class TestOCSFValidator:
             "category_uid": 3,
             "time": "2024-03-15T10:00:00Z",
         }
-        errors = validator.validate(event)
-        type_errors = [e for e in errors if e.error_type == "wrong_type"]
+        result = validator.validate(event)
+        # "not_an_integer" can't be converted to int → invalid_value error
+        type_errors = [e for e in result.errors if e.error_type == "invalid_value"]
         assert len(type_errors) > 0
 
     def test_validate_unknown_field(self):
@@ -84,8 +86,8 @@ class TestOCSFValidator:
             "time": "2024-03-15T10:00:00Z",
             "completely_unknown_field": "value",
         }
-        errors = validator.validate(event, strict=True)
-        unknown_errors = [e for e in errors if e.error_type == "unknown_field"]
+        result = validator.validate(event, strict=True)
+        unknown_errors = [e for e in result.errors if e.error_type == "unknown_field"]
         assert len(unknown_errors) > 0
 
     def test_validate_non_strict_allows_unknown(self):
@@ -98,8 +100,8 @@ class TestOCSFValidator:
             "time": "2024-03-15T10:00:00Z",
             "vendor_specific_field": "value",
         }
-        errors = validator.validate(event, strict=False)
-        unknown_errors = [e for e in errors if e.error_type == "unknown_field"]
+        result = validator.validate(event, strict=False)
+        unknown_errors = [e for e in result.errors if e.error_type == "unknown_field"]
         assert len(unknown_errors) == 0
 
     def test_get_stats(self):

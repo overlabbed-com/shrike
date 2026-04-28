@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import importlib.util
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -9,6 +10,13 @@ import pytest
 from shrike.extractor.embedding_field_mapper import (
     EmbeddingFieldMapper,
     _normalize_field_name,
+)
+
+_sentence_transformers_available = importlib.util.find_spec('sentence_transformers') is not None
+
+pytestmark = pytest.mark.skipif(
+    not _sentence_transformers_available,
+    reason='sentence_transformers not installed',
 )
 
 
@@ -40,18 +48,18 @@ class TestEmbeddingFieldMapper:
 
     def test_init_no_model(self):
         """Initializes without model (embedding disabled)."""
-        mapper = EmbeddingFieldMapper(model_path=None)
+        mapper = EmbeddingFieldMapper(index_path=None)
         assert mapper._model is None
 
     def test_map_field_no_model(self):
         """No model = None."""
-        mapper = EmbeddingFieldMapper(model_path=None)
-        result = mapper.map_field("sourceAddress", target_fields=["src_endpoint.ip"])
+        mapper = EmbeddingFieldMapper(index_path=None)
+        result = mapper.map_field("sourceAddress")
         assert result is None
 
     def test_get_stats(self):
         """get_stats() returns statistics."""
-        mapper = EmbeddingFieldMapper(model_path=None)
+        mapper = EmbeddingFieldMapper(index_path=None)
         stats = mapper.get_stats()
         assert "model_loaded" in stats
         assert "embedding_count" in stats

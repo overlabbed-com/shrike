@@ -94,6 +94,10 @@ class FingerprintCache:
         """Create a fingerprint from sorted top-level keys."""
         return "|".join(sorted(json_data.keys())[:12])
 
+    def get(self, json_data: dict) -> CachedTemplate | None:
+        return self.lookup(json_data, class_uid=0)
+
+
     def lookup(self, json_data: dict, class_uid: int) -> CachedTemplate | None:
         """Look up a cached extraction template for this JSON structure.
 
@@ -134,6 +138,12 @@ class FingerprintCache:
         event["class_name"] = template.class_name
 
         return event
+
+    def set(self, json_data: dict, template: CachedTemplate) -> None:
+        fp = self._fingerprint(json_data)
+        key = self._make_key(fp, template.class_uid)
+        self._templates[key] = template
+
 
     def learn(
         self,
@@ -240,6 +250,32 @@ class FingerprintCache:
         worst = min(self._templates.keys(),
                     key=lambda k: (self._templates[k].confidence, self._templates[k].last_hit))
         del self._templates[worst]
+
+    def remove(self, json_data: dict, class_uid: int | None = None) -> bool:
+        """Remove a template from the cache."""
+        fp = self._fingerprint(json_data)
+        uid = class_uid if class_uid is not None else 0
+        key = self._make_key(fp, uid)
+        if key in self._templates:
+            del self._templates[key]
+            return True
+        return False
+
+    def clear(self) -> None:
+        """Remove all templates from the cache."""
+        self._templates.clear()
+
+    def cache_stats(self) -> dict:
+        """Return cache statistics."""
+        total = self._hits + self._misses
+        hit_rate = (self._hits / total * 100) if total > 0 else 0.0
+        return {
+            "templates": len(self._templates),
+            "hits": self._hits,
+            "misses": self._misses,
+            "size": len(self._templates),
+            "hit_rate": hit_rate,
+        }
 
     def get_promotable(self) -> list[CachedTemplate]:
         """Get templates that are ready to be promoted to permanent patterns."""

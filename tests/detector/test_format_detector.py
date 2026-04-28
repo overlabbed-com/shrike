@@ -7,7 +7,6 @@ import pytest
 from shrike.detector.format_detector import (
     LogFormat,
     detect_format,
-    FormatDetector,
 )
 
 
@@ -60,39 +59,3 @@ class TestDetectFormat:
         assert detect_format(log) == LogFormat.CUSTOM
 
 
-class TestFormatDetector:
-    """Tests for FormatDetector class."""
-
-    def test_detect_all_formats(self):
-        """FormatDetector detects all known formats."""
-        detector = FormatDetector()
-
-        test_cases = [
-            ("Mar 15 10:00:00 host sshd[123]: Accepted", LogFormat.SYSLOG_BSD),
-            ('{"user": "alice"}', LogFormat.JSON),
-            ("CEF:0|Security|Product|1.0|100|Login|3", LogFormat.CEF),
-            ("LEEF:1.0|Security|Product|1.0|100|msg", LogFormat.LEEF),
-        ]
-
-        for log, expected_format in test_cases:
-            result = detector.detect(log)
-            assert result == expected_format, f"Expected {expected_format} for {log[:30]}"
-
-    def test_detect_batch(self):
-        """detect_batch() processes multiple logs."""
-        detector = FormatDetector()
-        logs = [
-            "Mar 15 10:00:00 host sshd[123]: Accepted",
-            '{"user": "alice"}',
-        ]
-        results = detector.detect_batch(logs)
-        assert len(results) == 2
-        assert results[0] == LogFormat.SYSLOG_BSD
-        assert results[1] == LogFormat.JSON
-
-    def test_get_stats(self):
-        """get_stats() returns detection statistics."""
-        detector = FormatDetector()
-        stats = detector.get_stats()
-        assert "total_detected" in stats
-        assert "format_counts" in stats

@@ -247,7 +247,8 @@ class TestHallucinationChecker:
         """count_hallucinations returns count of hallucinated fields."""
         checker = HallucinationChecker()
         event = {"user": "alice", "status": "success", "ip": "1.2.3.4"}
-        raw_log = 'sshd[123]: login success from alice'  # alice in log, success and ip not
+        # alice in log, status and ip not
+        raw_log = "sshd[123]: login from alice"
 
         count = checker.count_hallucinations(event, raw_log)
 

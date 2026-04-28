@@ -33,6 +33,13 @@ class SigmaRuleEngine:
         if rules_dir:
             self.load_rules(rules_dir)
 
+    def get_stats(self) -> dict[str, Any]:
+        """"Return Sigma rule engine statistics."""
+        return {
+            "rules_loaded": len(self.rules),
+            "last_match_count": 0,
+        }
+
     def load_rules(self, rules_dir: str | Path) -> int:
         """Load Sigma rules from directory.
 

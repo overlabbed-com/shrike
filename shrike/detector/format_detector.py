@@ -227,7 +227,7 @@ def detect_format(raw_log: str) -> LogFormat:
             return LogFormat.KV
         return LogFormat.SYSLOG_BSD
 
-    if "," in s and s[:500].count(",") >= 4:
+    if "," in s and s[:500].count(",") >= 3:
         return LogFormat.CSV
 
     return LogFormat.CUSTOM

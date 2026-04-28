@@ -1,5 +1,16 @@
 """Tests for S3/MinIO Parquet destination."""
 
+import importlib.util
+import pytest
+
+# pyarrow is optional
+pyarrow = importlib.util.find_spec("pyarrow")
+pytestmark = pytest.mark.skipif(
+    pyarrow is None,
+    reason="pyarrow not installed",
+)
+
+
 import pytest
 
 from shrike.destinations.s3_parquet import (

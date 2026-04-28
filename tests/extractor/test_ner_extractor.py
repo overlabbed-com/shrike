@@ -2,11 +2,19 @@
 
 from __future__ import annotations
 
+import importlib.util
 from unittest.mock import MagicMock, patch
 
 import pytest
 
 from shrike.extractor.ner_extractor import NERExtractor, ENTITY_OCSF_MAP
+
+_transformers_available = importlib.util.find_spec('transformers') is not None
+
+pytestmark = pytest.mark.skipif(
+    not _transformers_available,
+    reason='transformers not installed',
+)
 
 
 class TestNERExtractor:

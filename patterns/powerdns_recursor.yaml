@@ -1,0 +1,59 @@
+# PowerDNS Recursor DNS query logs
+# Format: structured key=value within BSD syslog
+# Example: pdns-recursor[906]: msg="Question" qname="www.example.com" qtype="A" remote="192.168.1.1:12345"
+source: powerdns_recursor
+patterns:
+  - name: pdns_question
+    match:
+      log_format: [syslog_bsd]
+      regex: 'pdns-recursor\[\d+\]:\s+msg="Question"\s+qname="(?P<query_name>[^"]+)"\s+qtype="(?P<query_type>[^"]+)"\s+remote="(?P<src_ip>[^:]+):(?P<src_port>\d+)"'
+    ocsf_class_uid: 4003
+    ocsf_class_name: DNS Query Activity
+    field_map:
+      query_name: query
+      query_type: dns_query_type
+      src_ip: src_endpoint.ip
+    ocsf_fields:
+      dns_query_type: "${{query_type}}"
+      src_endpoint:
+        ip: "${{src_ip}}"
+        port: "${{src_port}}"
+      dns_query: "${{query_name}}"
+
+  - name: pdns_answer
+    match:
+      log_format: [syslog_bsd]
+      regex: 'pdns-recursor\[\d+\]:\s+msg="Answer"\s+qname="(?P<query_name>[^"]+)"\s+qtype="(?P<query_type>[^"]+)"\s+rcode="(?P<rcode>\d+)"\s+remote="(?P<src_ip>[^:]+):(?P<src_port>\d+)"\s+totms="(?P<response_time_ms>[^"]+)"'
+    ocsf_class_uid: 4004
+    ocsf_class_name: DNS Response Activity
+    field_map:
+      query_name: query
+      query_type: query_type
+      rcode: dns_rcode
+      src_ip: src_endpoint.ip
+    ocsf_fields:
+      dns_rcode: "${{rcode}}"
+      query: "${{query_name}}"
+      query_type: "${{query_type}}"
+      src_endpoint:
+        ip: "${{src_ip}}"
+        port: "${{src_port}}"
+      response_time_ms: "${{response_time_ms}}"
+
+  - name: pdns_question_cached
+    match:
+      log_format: [syslog_bsd]
+      regex: 'pdns-recursor\[\d+\]:\s+msg="Question answered from packet cache"\s+qname="(?P<query_name>[^"]+)"\s+qtype="(?P<query_type>[^"]+)"\s+remote="(?P<src_ip>[^:]+):(?P<src_port>\d+)"'
+    ocsf_class_uid: 4003
+    ocsf_class_name: DNS Query Activity
+    field_map:
+      query_name: query
+      query_type: query_type
+      src_ip: src_endpoint.ip
+    ocsf_fields:
+      dns_query: "${{query_name}}"
+      dns_query_type: "${{query_type}}"
+      src_endpoint:
+        ip: "${{src_ip}}"
+        port: "${{src_port}}"
+      cache_hit: true

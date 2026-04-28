@@ -143,6 +143,7 @@ class FilterEngine:
     def __init__(self, packs_dir: Path | None = None):
         self._packs: dict[str, FilterPack] = {}
         self._active_pack: FilterPack = FilterPack.all_pass()
+        self._evaluation_count: int = 0
 
         if packs_dir and packs_dir.exists():
             self.load_packs(packs_dir)
@@ -165,8 +166,17 @@ class FilterEngine:
 
     def evaluate(self, class_uid: int, severity_id: int = 1, **kwargs) -> FilterResult:
         """Evaluate an event against the active filter pack."""
+        self._evaluation_count += 1
         return self._active_pack.evaluate(class_uid, severity_id, **kwargs)
 
     @property
     def available_packs(self) -> list[str]:
         return list(self._packs.keys())
+
+    def get_stats(self) -> dict[str, Any]:
+        """Return filter engine statistics."""
+        return {
+            "packs_loaded": len(self._packs),
+            "evaluations": self._evaluation_count,
+            "active_pack": self._active_pack.name,
+        }

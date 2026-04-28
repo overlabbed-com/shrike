@@ -76,6 +76,8 @@ class OCSFValidator:
 
     def __init__(self, schemas_dir: Path | None = None):
         self._schemas: dict[int, dict] = {}
+        self._validations: int = 0
+        self._errors: int = 0
         if schemas_dir is None:
             # Default to bundled schemas
             schemas_dir = Path(__file__).parent.parent.parent / "schemas" / "ocsf_v1.3" / "classes"
@@ -259,6 +261,11 @@ class OCSFValidator:
         else:
             field_coverage = 1.0  # No schema fields = trivially covered
 
+        # Track statistics
+        self._validations += 1
+        if errors:
+            self._errors += len(errors)
+
         return ValidationResult(
             valid=len(errors) == 0,
             class_uid=class_uid,
@@ -266,6 +273,15 @@ class OCSFValidator:
             warnings=warnings,
             field_coverage=field_coverage,
         )
+
+    def get_stats(self) -> dict[str, Any]:
+        """Return validation statistics."""
+        error_rate = self._errors / self._validations if self._validations > 0 else 0.0
+        return {
+            "schemas_loaded": len(self._schemas),
+            "validations": self._validations,
+            "error_rate": error_rate,
+        }
 
     def suggest_fixes(self, event: dict[str, Any], result: ValidationResult) -> dict[str, Any]:
         """Suggest fixes for validation errors. Returns a patched event dict.

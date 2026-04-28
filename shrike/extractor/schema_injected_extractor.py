@@ -141,8 +141,8 @@ class SchemaInjectedExtractor:
             max_tokens: Maximum output tokens.
         """
         self._schemas: dict[int, dict] = {}
-        self._api_base = api_base.rstrip("/")
-        if not self._api_base.startswith(("http://", "https://")):
+        self._api_base = api_base.rstrip("/") if api_base else None
+        if self._api_base and not self._api_base.startswith(("http://", "https://")):
             raise ValueError(f"LLM API URL must use http:// or https:// scheme, got: {api_base}")
         self._model = model
         self._api_key = api_key
@@ -186,7 +186,18 @@ class SchemaInjectedExtractor:
 
         start = time.monotonic()
 
+        if self._api_base is None:
+            return ExtractionResult(
+                event={"class_uid": class_uid, "raw_data": raw_log},
+                class_uid=class_uid,
+                class_name=class_name or f"Unknown ({class_uid})",
+                raw_log=raw_log,
+                error="LLM extraction disabled (no api_base)",
+            )
+
         schema = self._schemas.get(class_uid)
+
+        start = time.monotonic()
         if schema is None:
             return ExtractionResult(
                 event={"class_uid": class_uid, "raw_data": raw_log},

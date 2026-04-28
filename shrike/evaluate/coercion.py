@@ -101,6 +101,25 @@ class OCSFCoercer:
     def __init__(self) -> None:
         self._type_map = dict(FIELD_TYPE_MAP)
 
+    def evaluate_batch(self, results: list[tuple[dict, dict]]) -> float:
+        """"Score type coercion quality across a batch of results.
+
+        Args:
+            results: List of (actual, expected) dicts.
+
+        Returns:
+            Score 0-100 representing % of fields correctly coerced.
+        """
+        if not results:
+            return 0.0
+        correct = 0
+        for actual, expected in results:
+            for field, exp_val in expected.items():
+                act_val = actual.get(field)
+                if self.validate_type(field, act_val) and act_val == exp_val:
+                    correct += 1
+        return round(correct / len(results) * 100, 1)
+
     def get_type(self, field_path: str) -> str | None:
         """Get the expected type for a field path."""
         # Exact match first

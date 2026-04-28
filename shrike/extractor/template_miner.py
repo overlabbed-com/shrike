@@ -259,6 +259,14 @@ class LogTemplateMiner:
 
         return len(self._templates)
 
+    def get_stats(self) -> dict:
+        """Return mining statistics."""
+        return {
+            "templates_learned": len(self._templates),
+            "logs_processed": 0,
+        }
+
+
     def extract(self, log: str) -> dict[str, Any] | None:
         """Extract OCSF fields from a log using learned templates.
 

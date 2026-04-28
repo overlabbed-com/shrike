@@ -7,8 +7,19 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+from pathlib import Path
+
+import pytest
+
 from shrike.destinations.router import DestinationRouter
 from shrike.destinations.wal import WriteAheadLog
+
+
+@pytest.fixture
+def wal_dir(tmp_path: Path) -> Path:
+    d = tmp_path / "wal"
+    d.mkdir()
+    return d
 
 
 class FakeDestination:

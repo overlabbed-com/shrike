@@ -1,5 +1,6 @@
 """Syslog bridge — receives syslog and feeds the normalization pipeline.
 
+
 Listens on port 1514 (TCP/UDP), parses RFC 3164 / RFC 5424 messages,
 and feeds raw log lines into the Shrike pipeline via the destination router.
 """
@@ -8,6 +9,8 @@ from __future__ import annotations
 
 import asyncio
 import re
+
+from shrike.metrics import events_normalized
 import socket
 import time
 from typing import Optional
@@ -99,6 +102,7 @@ class SyslogBridge:
         async with self._lock:
             if not self._buffer:
                 return
+            logger.warning("send_buffer flushing", count=len(self._buffer))
             logs = self._buffer[:]
             self._buffer.clear()
 
@@ -111,6 +115,7 @@ class SyslogBridge:
         for raw_log in logs:
             if self._pipeline:
                 result = self._pipeline.process(raw_log)
+                logger.warning("pipeline result", dropped=result.dropped, class_uid=result.class_uid)
                 if not result.dropped:
                     rd = result.to_dict()
                     event = rd.get("event", {})
@@ -127,20 +132,25 @@ class SyslogBridge:
 
         if events and self._router:
             try:
+                logger.warning("routing events", count=len(events))
                 await self._router.route(events)
-            except Exception:
-                pass
+                events_normalized.inc(len(events))
+            except Exception as e:
+                logger.warning("router error", error=str(e))
 
     async def _tick(self):
         """Periodic flush."""
+        logger.debug("tick starting", interval=self.batch_interval)
         while self._running:
             await asyncio.sleep(self.batch_interval)
+            logger.debug("tick firing", pending=len(self._buffer))
             if time.monotonic() - self._last_send >= self.batch_interval:
                 self._last_send = time.monotonic()
                 await self._send_buffer()
 
     async def _handle(self, data: bytes):
         """Handle incoming syslog message."""
+        logger.debug("handle called", data_len=len(data))
         parsed = _parse_message(data)
         raw = parsed["raw_log"] if parsed else None
         if not raw:
@@ -151,6 +161,7 @@ class SyslogBridge:
                 return
         if not raw or len(raw) < 4:
             return
+        logger.debug("handle raw", raw=raw[:50])
 
         async with self._lock:
             self._buffer.append(raw)
@@ -159,16 +170,23 @@ class SyslogBridge:
                 asyncio.create_task(self._send_buffer())
 
     async def _udp_server(self, sock: socket.socket):
+        loop = asyncio.get_running_loop()
+        logger.info("UDP server starting", host=self.host, port=self.port)
         while self._running:
             try:
-                await asyncio.get_event_loop().sock_recvfrom(sock, 4096)
-            except Exception:
+                data = await loop.sock_recv(sock, 4096)
+                logger.debug("UDP received", data_len=len(data))
+                if data:
+                    await self._handle(data)
+            except Exception as e:
+                logger.debug("UDP error", error=str(e))
                 pass
 
     async def _tcp_server(self, sock: socket.socket):
+        loop = asyncio.get_running_loop()
         while self._running:
             try:
-                conn, _ = await asyncio.get_event_loop().sock_accept(sock)
+                conn, _ = await loop.sock_accept(sock)
                 asyncio.create_task(self._handle_tcp(conn))
             except Exception:
                 pass

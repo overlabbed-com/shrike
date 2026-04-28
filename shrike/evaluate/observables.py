@@ -104,7 +104,6 @@ EXCLUDE_FIELDS = frozenset({
     "metadata.logged_time",
 })
 
-
 class ObservablesBuilder:
     """Build OCSF observables[] array from extracted event fields."""
 
@@ -175,3 +174,27 @@ class ObservablesBuilder:
                 return type_id, type_name
 
         return None, ""
+
+    def evaluate_batch(self, results):
+        if not results:
+            return 0.0
+        covered = 0
+        for actual, expected in results:
+            obs = self.build(actual)
+            obs_fields = {o['name'] for o in obs}
+            for field in expected:
+                if field in obs_fields:
+                    covered += 1
+        return round(covered / len(results) * 100, 1)
+
+    def evaluate_batch(self, results):
+        if not results:
+            return 0.0
+        covered = 0
+        for actual, expected in results:
+            obs = self.build(actual)
+            obs_fields = {o["name"] for o in obs}
+            for field in expected:
+                if field in obs_fields:
+                    covered += 1
+        return round(covered / len(results) * 100, 1)

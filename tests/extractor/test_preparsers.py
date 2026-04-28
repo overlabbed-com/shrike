@@ -13,6 +13,7 @@ from shrike.extractor.preparsers import (
     preparse_cef,
     preparse_leef,
 )
+from shrike.detector.format_detector import LogFormat
 
 
 class TestPreparseSyslogBsd:
@@ -118,32 +119,32 @@ class TestPreparseDispatch:
     def test_dispatches_to_syslog_bsd(self):
         """preparse() dispatches to syslog BSD."""
         log = "Mar 15 10:00:00 host sshd[123]: Accepted"
-        result = preparse(log)
+        result = preparse(log, LogFormat.SYSLOG_BSD)
         assert result is not None
         assert result.format_type == "syslog_bsd"
 
     def test_dispatches_to_json(self):
         """preparse() dispatches to JSON."""
         log = '{"user": "alice"}'
-        result = preparse(log)
+        result = preparse(log, LogFormat.JSON)
         assert result is not None
         assert result.format_type == "json"
 
     def test_dispatches_to_cef(self):
         """preparse() dispatches to CEF."""
         log = "CEF:0|Security|Product|1.0|100|Login|3|src=192.168.1.1"
-        result = preparse(log)
+        result = preparse(log, LogFormat.CEF)
         assert result is not None
         assert result.format_type == "cef"
 
     def test_dispatches_to_leef(self):
         """preparse() dispatches to LEEF."""
         log = "LEEF:1.0|Security|Product|1.0|100|src=192.168.1.1"
-        result = preparse(log)
+        result = preparse(log, LogFormat.LEEF)
         assert result is not None
         assert result.format_type == "leef"
 
     def test_returns_none_for_unknown_format(self):
         """preparse() returns None for unknown format."""
-        result = preparse("completely unknown format")
+        result = preparse("completely unknown format", LogFormat.CUSTOM)
         assert result is None

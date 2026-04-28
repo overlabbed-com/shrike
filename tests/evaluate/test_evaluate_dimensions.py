@@ -32,9 +32,22 @@ def _make_result(
 ):
     """Create a mock (ExtractionResult, gt_record) tuple."""
     from shrike.extractor.schema_injected_extractor import ExtractionResult
-    confidence = {k: confidence_method for k in fields}
+    # Support both flat keys (src_endpoint.ip=val) and nested dicts
+    event = {"class_uid": class_uid}
+    confidence = {}
+    for k, v in fields.items():
+        if "." in k:
+            # Flat key like src_endpoint.ip → nested dict
+            parts = k.split(".", 1)
+            if parts[0] not in event:
+                event[parts[0]] = {}
+            event[parts[0]][parts[1]] = v
+            confidence[k] = confidence_method
+        else:
+            event[k] = v
+            confidence[k] = confidence_method
     result = ExtractionResult(
-        event={"class_uid": class_uid, **fields},
+        event=event,
         class_uid=class_uid,
         class_name="Authentication",
         raw_log="test log",

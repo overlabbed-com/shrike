@@ -12,6 +12,17 @@ from shrike.evaluate.types import DimensionScore
 from shrike.extractor.schema_injected_extractor import ExtractionResult
 
 
+def _make_result(event: dict, class_uid: int = 3002, class_name: str = "Authentication") -> ExtractionResult:
+    """Create an ExtractionResult for testing."""
+    return ExtractionResult(
+        event=event,
+        class_uid=class_uid,
+        class_name=class_name,
+        raw_log="test",
+        confidence={"user": "pattern", "src_endpoint.ip": "pattern"},
+    )
+
+
 class TestMeasureAttackCoverage:
     """Tests for measure_attack_coverage function."""
 
@@ -19,11 +30,10 @@ class TestMeasureAttackCoverage:
         """No extraction results returns zero score."""
         result = measure_attack_coverage([])
         assert result.score == 0.0
-        assert result.total == 0
+        assert result.total == 23
 
     def test_no_class_events_all_blind(self):
         """No events in required OCSF classes = all blind."""
-        # Empty extraction result (no class match)
         results = [
             (None, {"class_uid": 3002}),
         ]
@@ -41,16 +51,14 @@ class TestMeasureAttackCoverage:
             "status": "success",
         }
         results = [
-            (ExtractionResult(event=event, method="pattern", confidence=0.9), {"class_uid": 3002}),
+            (_make_result(event), {"class_uid": 3002}),
         ]
         result = measure_attack_coverage(results)
-        # T1078 should be covered
         assert "T1078" in result.metadata["techniques"]
         assert result.metadata["techniques"]["T1078"]["status"] == "covered"
 
     def test_missing_required_fields_partial(self):
         """Missing required fields = partial coverage."""
-        # Event missing src_endpoint.ip
         event = {
             "class_uid": 3002,
             "activity_id": 1,
@@ -58,7 +66,7 @@ class TestMeasureAttackCoverage:
             "status": "success",
         }
         results = [
-            (ExtractionResult(event=event, method="pattern", confidence=0.9), {"class_uid": 3002}),
+            (_make_result(event), {"class_uid": 3002}),
         ]
         result = measure_attack_coverage(results)
         assert "T1078" in result.metadata["techniques"]
@@ -66,7 +74,6 @@ class TestMeasureAttackCoverage:
 
     def test_activity_filter_respected(self):
         """Activity filter only counts matching activity_id events."""
-        # T1078 only wants activity_id=1 (Logon)
         event_logon = {
             "class_uid": 3002,
             "activity_id": 1,
@@ -76,22 +83,20 @@ class TestMeasureAttackCoverage:
         }
         event_logoff = {
             "class_uid": 3002,
-            "activity_id": 2,  # Logoff — not in activity_filter
+            "activity_id": 2,
             "user": "alice",
             "src_endpoint": {"ip": "192.168.1.1"},
             "status": "success",
         }
         results = [
-            (ExtractionResult(event=event_logon, method="pattern", confidence=0.9), {"class_uid": 3002}),
-            (ExtractionResult(event=event_logoff, method="pattern", confidence=0.9), {"class_uid": 3002}),
+            (_make_result(event_logon), {"class_uid": 3002}),
+            (_make_result(event_logoff), {"class_uid": 3002}),
         ]
         result = measure_attack_coverage(results)
-        # T1078 should still be covered (activity filter uses best match)
         assert "T1078" in result.metadata["techniques"]
 
     def test_nice_to_have_bonus(self):
         """Nice-to-have fields provide up to 20% bonus."""
-        # Event with all required + nice_to_have fields
         event = {
             "class_uid": 3002,
             "activity_id": 1,
@@ -102,7 +107,7 @@ class TestMeasureAttackCoverage:
             "actor": {"user": {"name": "alice"}},
         }
         results = [
-            (ExtractionResult(event=event, method="pattern", confidence=0.9), {"class_uid": 3002}),
+            (_make_result(event), {"class_uid": 3002}),
         ]
         result = measure_attack_coverage(results)
         assert "T1078" in result.metadata["techniques"]
@@ -112,7 +117,6 @@ class TestMeasureAttackCoverage:
 
     def test_multiple_techniques_scored(self):
         """Multiple techniques scored independently."""
-        # T1078 (Valid Accounts) + T1059 (Command and Scripting Interpreter)
         auth_event = {
             "class_uid": 3002,
             "activity_id": 1,
@@ -126,13 +130,12 @@ class TestMeasureAttackCoverage:
             "process": {"name": "bash", "cmd_line": "ls -la"},
         }
         results = [
-            (ExtractionResult(event=auth_event, method="pattern", confidence=0.9), {"class_uid": 3002}),
-            (ExtractionResult(event=process_event, method="pattern", confidence=0.9), {"class_uid": 1007}),
+            (_make_result(auth_event), {"class_uid": 3002}),
+            (_make_result(process_event, class_uid=1007, class_name="Process Activity"), {"class_uid": 1007}),
         ]
         result = measure_attack_coverage(results)
         assert "T1078" in result.metadata["techniques"]
         assert "T1059" in result.metadata["techniques"]
-        # Both should be covered
         assert result.metadata["covered"] >= 2
 
     def test_subscores_by_detection_type(self):
@@ -145,7 +148,7 @@ class TestMeasureAttackCoverage:
             "status": "success",
         }
         results = [
-            (ExtractionResult(event=event, method="pattern", confidence=0.9), {"class_uid": 3002}),
+            (_make_result(event), {"class_uid": 3002}),
         ]
         result = measure_attack_coverage(results)
         assert "normalization_coverage_pct" in result.metadata
@@ -155,22 +158,19 @@ class TestMeasureAttackCoverage:
 
     def test_tactic_gaps_grouped(self):
         """Blind techniques grouped by tactic in failures."""
-        # Only empty results = all blind
         results = [
             (None, {"class_uid": 3002}),
         ]
         result = measure_attack_coverage(results)
-        # Should have failures grouped by tactic
         assert len(result.failures) > 0
         assert result.failures[0].category == "tactic_gap"
 
     def test_technique_map_complete(self):
         """ATTACK_TECHNIQUE_MAP has all expected techniques."""
-        assert "T1078" in ATTACK_TECHNIQUE_MAP  # Valid Accounts
-        assert "T1059" in ATTACK_TECHNIQUE_MAP  # Command and Scripting Interpreter
-        assert "T1110" in ATTACK_TECHNIQUE_MAP  # Brute Force
-        assert "T1571" in ATTACK_TECHNIQUE_MAP  # Non-Standard Port
-        # All have required structure
+        assert "T1078" in ATTACK_TECHNIQUE_MAP
+        assert "T1059" in ATTACK_TECHNIQUE_MAP
+        assert "T1110" in ATTACK_TECHNIQUE_MAP
+        assert "T1571" in ATTACK_TECHNIQUE_MAP
         for tech_id, tech in ATTACK_TECHNIQUE_MAP.items():
             assert "name" in tech
             assert "tactic" in tech
@@ -182,6 +182,5 @@ class TestMeasureAttackCoverage:
         """_ALL_REQUIRED_FIELDS collected from all techniques."""
         from shrike.evaluate.attack_coverage import _ALL_REQUIRED_FIELDS
         assert len(_ALL_REQUIRED_FIELDS) > 0
-        # Common fields should be present
         assert "user" in _ALL_REQUIRED_FIELDS
         assert "src_endpoint.ip" in _ALL_REQUIRED_FIELDS

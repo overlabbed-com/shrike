@@ -211,3 +211,12 @@ class FieldMapper:
     @property
     def alias_count(self) -> int:
         return len(self._aliases)
+
+    def map_batch(self, vendor_fields: list[str]) -> list[str | None]:
+        return [self.map_field(f) for f in vendor_fields]
+
+    def get_stats(self) -> dict:
+        return {
+            'aliases_loaded': len(self._aliases),
+            'embedding_available': self._embedding_available is True,
+        }

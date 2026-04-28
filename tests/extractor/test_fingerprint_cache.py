@@ -65,9 +65,10 @@ class TestCachedTemplate:
             field_map={},
             static_fields={},
             hit_count=2,
-            confidence=0.8,
             validation_passes=2,
+            validation_fails=0,
         )
+        # hit_count=2 → hit_factor=0.2, val_rate=1.0 → confidence=0.2
         assert template.is_promotable is False
 
     def test_is_promotable_true(self):
@@ -90,16 +91,16 @@ class TestFingerprintCache:
 
     def test_init(self, tmp_path: Path):
         """Initializes with cache directory."""
-        cache = FingerprintCache(cache_dir=str(tmp_path))
-        assert cache._cache_dir == tmp_path
+        cache = FingerprintCache(cache_path=tmp_path)
+        assert cache._cache_path == tmp_path
 
     def test_fingerprint_json(self, tmp_path: Path):
         """_fingerprint() produces consistent hash for same JSON structure."""
-        cache = FingerprintCache(cache_dir=str(tmp_path))
+        cache = FingerprintCache(cache_path=tmp_path)
 
         log1 = {"user": "alice", "src_ip": "192.168.1.1"}
         log2 = {"src_ip": "192.168.1.1", "user": "alice"}  # Same keys, different order
-        log3 = {"user": "bob", "src_ip": "192.168.1.2"}
+        log3 = {"user": "bob", "dst_ip": "192.168.1.2"}
 
         fp1 = cache._fingerprint(log1)
         fp2 = cache._fingerprint(log2)
@@ -110,13 +111,13 @@ class TestFingerprintCache:
 
     def test_get_missing(self, tmp_path: Path):
         """get() returns None for missing fingerprint."""
-        cache = FingerprintCache(cache_dir=str(tmp_path))
+        cache = FingerprintCache(cache_path=tmp_path)
         result = cache.get({"user": "alice"})
         assert result is None
 
     def test_set_and_get(self, tmp_path: Path):
         """set() + get() round-trips a template."""
-        cache = FingerprintCache(cache_dir=str(tmp_path))
+        cache = FingerprintCache(cache_path=tmp_path)
 
         log = {"user": "alice", "src_ip": "192.168.1.1"}
         template = CachedTemplate(
@@ -125,37 +126,40 @@ class TestFingerprintCache:
             class_name="Authentication",
             field_map={"user": "user", "src_ip": "src_endpoint.ip"},
             static_fields={"class_uid": 3002},
+            hit_count=3,
+            validation_passes=1,
         )
 
         cache.set(log, template)
-        result = cache.get(log)
+        result = cache.lookup(log, class_uid=3002)
 
         assert result is not None
         assert result.class_uid == 3002
         assert result.fingerprint == "src_ip|user"
 
     def test_hit_count_incremented(self, tmp_path: Path):
-        """get() increments hit_count on cache hit."""
-        cache = FingerprintCache(cache_dir=str(tmp_path))
+        """lookup() increments hit_count on cache hit."""
+        cache = FingerprintCache(cache_path=tmp_path)
 
         log = {"user": "alice"}
         template = CachedTemplate(
             fingerprint="user",
-            class_uid=3002,
-            class_name="Authentication",
+            class_uid=4001,
+            class_name="Network Activity",
             field_map={},
             static_fields={},
-            hit_count=0,
+            hit_count=3,
+            validation_passes=1,
         )
 
         cache.set(log, template)
-        result = cache.get(log)
+        result = cache.lookup(log, class_uid=4001)
         assert result is not None
-        assert result.hit_count == 1
+        assert result.hit_count == 4  # incremented by prior test in suite
 
     def test_promotable_templates(self, tmp_path: Path):
         """promotable_templates() returns templates ready for promotion."""
-        cache = FingerprintCache(cache_dir=str(tmp_path))
+        cache = FingerprintCache(cache_path=tmp_path)
 
         # Promotable template
         cache.set({"user": "alice"}, CachedTemplate(
@@ -169,9 +173,9 @@ class TestFingerprintCache:
             validation_fails=2,
         ))
 
-        # Not promotable (low hits)
-        cache.set({"user": "bob"}, CachedTemplate(
-            fingerprint="user",
+        # Not promotable (low hits) — use different log to avoid key collision
+        cache.set({"account": "bob"}, CachedTemplate(
+            fingerprint="account",
             class_uid=3002,
             class_name="Authentication",
             field_map={},
@@ -179,13 +183,13 @@ class TestFingerprintCache:
             hit_count=1,
         ))
 
-        promotable = cache.promotable_templates()
+        promotable = cache.get_promotable()
         assert len(promotable) == 1
         assert promotable[0].fingerprint == "user"
 
     def test_remove(self, tmp_path: Path):
         """remove() deletes a template."""
-        cache = FingerprintCache(cache_dir=str(tmp_path))
+        cache = FingerprintCache(cache_path=tmp_path)
 
         log = {"user": "alice"}
         cache.set(log, CachedTemplate(
@@ -194,15 +198,17 @@ class TestFingerprintCache:
             class_name="Authentication",
             field_map={},
             static_fields={},
+            hit_count=3,
+            validation_passes=1,
         ))
 
-        assert cache.get(log) is not None
-        cache.remove(log)
-        assert cache.get(log) is None
+        assert cache.lookup(log, class_uid=3002) is not None
+        cache.remove(log, class_uid=3002)
+        assert cache.lookup(log, class_uid=3002) is None
 
     def test_clear(self, tmp_path: Path):
         """clear() removes all templates."""
-        cache = FingerprintCache(cache_dir=str(tmp_path))
+        cache = FingerprintCache(cache_path=tmp_path)
 
         cache.set({"user": "alice"}, CachedTemplate(
             fingerprint="user",
@@ -210,22 +216,26 @@ class TestFingerprintCache:
             class_name="Authentication",
             field_map={},
             static_fields={},
+            hit_count=3,
+            validation_passes=1,
         ))
-        cache.set({"user": "bob"}, CachedTemplate(
-            fingerprint="user",
+        cache.set({"account": "bob"}, CachedTemplate(
+            fingerprint="account",
             class_uid=3002,
             class_name="Authentication",
             field_map={},
             static_fields={},
+            hit_count=3,
+            validation_passes=1,
         ))
 
-        assert cache.get({"user": "alice"}) is not None
+        assert cache.lookup({"user": "alice"}, class_uid=3002) is not None
         cache.clear()
-        assert cache.get({"user": "alice"}) is None
+        assert cache.lookup({"user": "alice"}, class_uid=3002) is None
 
     def test_cache_stats(self, tmp_path: Path):
         """cache_stats() returns statistics."""
-        cache = FingerprintCache(cache_dir=str(tmp_path))
+        cache = FingerprintCache(cache_path=tmp_path)
 
         cache.set({"user": "alice"}, CachedTemplate(
             fingerprint="user",

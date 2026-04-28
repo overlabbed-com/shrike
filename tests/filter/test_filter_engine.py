@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from pathlib import Path
-from unittest.mock import patch
 
 import pytest
 
@@ -49,39 +48,68 @@ rules:
         path = tmp_path / "test.yaml"
         path.write_text(yaml_content)
 
-        engine = FilterEngine(packs_dir=str(tmp_path))
+        engine = FilterEngine(packs_dir=tmp_path)
         assert "test" in engine._packs
 
-    def test_evaluate_keep_class(self):
+    def test_evaluate_keep_class(self, tmp_path: Path):
         """Keeps events matching class filter."""
-        engine = FilterEngine()
-        event = {"class_uid": 3002, "class_name": "Authentication"}
-        result = engine.evaluate(event, pack_name="security-focused")
+        yaml_content = """
+name: security-focused
+rules:
+  - keep: {classes: [3002]}
+  - drop: {all: true}
+"""
+        path = tmp_path / "security-focused.yaml"
+        path.write_text(yaml_content)
+
+        engine = FilterEngine(packs_dir=tmp_path)
+        engine.set_active("security-focused")
+        result = engine.evaluate(3002)
         assert result.action == "keep"
 
-    def test_evaluate_drop_class(self):
+    def test_evaluate_drop_class(self, tmp_path: Path):
         """Drops events not matching class filter."""
-        engine = FilterEngine()
-        event = {"class_uid": 0}
-        result = engine.evaluate(event, pack_name="security-focused")
+        yaml_content = """
+name: security-focused
+rules:
+  - keep: {classes: [3002]}
+  - drop: {all: true}
+"""
+        path = tmp_path / "security-focused.yaml"
+        path.write_text(yaml_content)
+
+        engine = FilterEngine(packs_dir=tmp_path)
+        engine.set_active("security-focused")
+        result = engine.evaluate(0)
         assert result.action == "drop"
 
     def test_evaluate_no_pack(self):
         """No pack = default keep."""
         engine = FilterEngine()
-        event = {"class_uid": 3002}
-        result = engine.evaluate(event, pack_name="nonexistent")
+        result = engine.evaluate(3002)
         assert result.action == "keep"
 
-    def test_list_packs(self):
+    def test_list_packs(self, tmp_path: Path):
         """Lists available filter packs."""
-        engine = FilterEngine()
-        packs = engine.list_packs()
+        yaml_content = """
+name: test-pack
+rules:
+  - keep: {all: true}
+"""
+        path = tmp_path / "test-pack.yaml"
+        path.write_text(yaml_content)
+
+        engine = FilterEngine(packs_dir=tmp_path)
+        packs = engine.available_packs
         assert isinstance(packs, list)
+        assert "test-pack" in packs
 
     def test_get_stats(self):
         """get_stats() returns statistics."""
         engine = FilterEngine()
+        engine.evaluate(3002)
+        engine.evaluate(3003)
         stats = engine.get_stats()
         assert "packs_loaded" in stats
         assert "evaluations" in stats
+        assert stats["evaluations"] == 2
