@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock, Mock, patch
 
 import pytest
 
@@ -69,21 +69,16 @@ class TestSchemaInjectedExtractor:
         result = extractor.extract("any log", 3002, "")
         assert result.error is not None
 
-    @pytest.mark.skip(reason="Requires async mock setup for _call_api")
     def test_extract_with_mock_llm(self):
-        """LLM returns extraction result."""
+        """"LLM returns extraction result."""
         extractor = SchemaInjectedExtractor(api_base="http://localhost:11434/v1")
 
-        mock_result = ExtractionResult(
-            event={"class_uid": 3002, "user": "alice"},
-            class_uid=3002,
-            class_name="Authentication",
-            raw_log="sshd: Accepted password for alice",
-            confidence={"user": "llm"},
-        )
-        with patch.object(extractor, "_call_api", AsyncMock(return_value=mock_result)):
+        # _call_api returns a JSON string that _extract_json parses
+        mock_json_response = '{"user": "alice", "class_uid": 3002, "class_name": "Authentication", "severity_id": 1}'
+        with patch.object(extractor, "_call_api", Mock(return_value=mock_json_response)):
             result = extractor.extract("sshd: Accepted password for alice", 3002, "")
-            assert result is mock_result
+            assert result.event.get("user") == "alice"
+            assert result.class_uid == 3002
 
 
 class TestBuildSchemaContext:

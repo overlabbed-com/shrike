@@ -52,8 +52,8 @@ class PreparseExtractor:
         api_key: str = "",
     ):
         self._schemas: dict[int, dict] = {}
-        self._api_base = api_base.rstrip("/")
-        if not self._api_base.startswith(("http://", "https://")):
+        self._api_base = api_base.rstrip("/") if api_base else None
+        if self._api_base and not self._api_base.startswith(("http://", "https://")):
             raise ValueError(f"LLM API URL must use http:// or https:// scheme, got: {api_base}")
         self._model = model
         self._api_key = api_key
